@@ -2,14 +2,19 @@ import logging
 import requests
 from datetime import datetime
 from telegram import Update
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    MessageHandler,
+    ContextTypes,
+    filters
+)
 
-# Replace this with your Telegram bot token
-BOT_TOKEN = '7795554263:AAE7yje0MLNqiruDXWYjHx-xkgtqZGt5ByM'
+BOT_TOKEN = '7795554263:AAE7yje0MLNqiruDXWYjHx-xkgtqZGt5ByM'  # Replace with your actual token
 
 # Enable logging
 logging.basicConfig(
-    format='📜 %(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
@@ -24,8 +29,8 @@ def format_time(utc_str):
         return "Unknown Time"
 
 # 📍 /start command
-def start(update: Update, context: CallbackContext):
-    update.message.reply_text(
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
         "👋 *Welcome to InstaStory Bot!*\n\n"
         "📥 Use `/story <username>` to download Instagram stories.\n"
         "📥 Or just send any Instagram post/reel link to get media.\n\n"
@@ -34,9 +39,9 @@ def start(update: Update, context: CallbackContext):
     )
 
 # 📍 /story command
-def story(update: Update, context: CallbackContext):
+async def story(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if len(context.args) != 1:
-        update.message.reply_text(
+        await update.message.reply_text(
             "⚠️ Please provide exactly *one* Instagram username.\n\n"
             "✅ Example: `/story virat.kohli`",
             parse_mode="Markdown"
@@ -52,13 +57,12 @@ def story(update: Update, context: CallbackContext):
         logger.info("📦 Story Response: %s", data)
 
         if not data.get("success"):
-            update.message.reply_text(f"❌ Failed to fetch stories: {data.get('message', 'Unknown error.')}")
+            await update.message.reply_text(f"❌ Failed to fetch stories: {data.get('message', 'Unknown error.')}")
             return
 
         user = data["data"]["user"]
         stories = data["data"].get("stories", [])
 
-        # 🧾 Profile Info
         profile_text = (
             f"🔗 *Profile Link:* [Click Here]({user['profile']})\n"
             f"📌 *Bio:* {user.get('bio', 'No bio')}\n"
@@ -69,33 +73,32 @@ def story(update: Update, context: CallbackContext):
             f"🕒 *Account Created:* {format_time(user.get('created_at'))}\n"
             f"🔄 *Last Updated:* {format_time(user.get('updated_at'))}"
         )
-        update.message.reply_text(profile_text, parse_mode="Markdown", disable_web_page_preview=True)
+        await update.message.reply_text(profile_text, parse_mode="Markdown", disable_web_page_preview=True)
 
         if not stories:
-            update.message.reply_text(f"ℹ️ No active stories found for @{username}.")
+            await update.message.reply_text(f"ℹ️ No active stories found for @{username}.")
             return
 
-        # 📤 Send Stories
         for i, story in enumerate(stories, 1):
             media_url = story.get("download")
             media_type = story.get("type")
             try:
                 if media_type == "video":
-                    update.message.reply_video(video=media_url)
+                    await update.message.reply_video(video=media_url)
                 elif media_type == "photo":
-                    update.message.reply_photo(photo=media_url)
+                    await update.message.reply_photo(photo=media_url)
                 else:
-                    update.message.reply_text(f"📎 Story {i} (Unknown Type): {media_url}")
+                    await update.message.reply_text(f"📎 Story {i} (Unknown Type): {media_url}")
             except Exception as e:
                 logger.warning("⚠️ Failed to send media. Sending link instead: %s", str(e))
-                update.message.reply_text(f"📎 Link to Story {i}: {media_url}")
+                await update.message.reply_text(f"📎 Link to Story {i}: {media_url}")
 
     except Exception as e:
         logger.error("❌ Error fetching story: %s", str(e))
-        update.message.reply_text("❌ Error occurred while fetching story. Try again later.")
+        await update.message.reply_text("❌ Error occurred while fetching story. Try again later.")
 
 # 📥 Handle Reels/Posts automatically
-def handle_reel(update: Update, context: CallbackContext):
+async def handle_reel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
 
     if "instagram.com" not in text or not any(x in text for x in ["/reel/", "/p/", "/tv/"]):
@@ -110,7 +113,7 @@ def handle_reel(update: Update, context: CallbackContext):
         logger.info("📦 Post Response: %s", data)
 
         if not data.get("success"):
-            update.message.reply_text(f"❌ Failed to fetch post: {data.get('message', 'Unknown error.')}")
+            await update.message.reply_text(f"❌ Failed to fetch post: {data.get('message', 'Unknown error.')}")
             return
 
         d = data["data"]
@@ -119,40 +122,35 @@ def handle_reel(update: Update, context: CallbackContext):
         username = d.get("username", "Unknown")
         is_video = d.get("isVideo", False)
 
-        # 🧾 Post Info
         text_info = (
             f"🔗 *Original Post:* [Open on Instagram]({post_url})\n"
             f"👤 *Posted by:* {username}\n"
             f"🕒 *Posted on:* {d.get('created_at', 'Unknown Time')}\n\n"
             f"🎬 *Caption:*\n```\n{caption}\n```"
         )
-        update.message.reply_text(text_info, parse_mode="Markdown", disable_web_page_preview=True)
+        await update.message.reply_text(text_info, parse_mode="Markdown", disable_web_page_preview=True)
 
         for media_url in media_urls:
             try:
                 if is_video:
-                    update.message.reply_video(video=media_url)
+                    await update.message.reply_video(video=media_url)
                 else:
-                    update.message.reply_photo(photo=media_url)
+                    await update.message.reply_photo(photo=media_url)
             except:
-                update.message.reply_text(f"📎 Media: {media_url}")
+                await update.message.reply_text(f"📎 Media: {media_url}")
 
     except Exception as e:
         logger.error("❌ Error fetching reel/post: %s", str(e))
-        update.message.reply_text("❌ Error occurred while fetching post.")
+        await update.message.reply_text("❌ Error occurred while fetching post.")
 
-# 🚀 Main Function
-def main():
-    updater = Updater(BOT_TOKEN, use_context=True)
-    dp = updater.dispatcher
-
-    dp.add_handler(CommandHandler("start", start))
-    dp.add_handler(CommandHandler("story", story))
-    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_reel))
-
-    updater.start_polling()
-    logger.info("🤖 Bot started polling...")
-    updater.idle()
+# 🚀 Main function
+async def main():
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("story", story))
+    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_reel))
+    await app.run_polling()
 
 if __name__ == "__main__":
-    main()
+    import asyncio
+    asyncio.run(main())
