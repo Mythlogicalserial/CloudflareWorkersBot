@@ -1,16 +1,16 @@
 import logging
 import requests
 from datetime import datetime
-from telegram import Update
+from telegram import Update, Bot, ParseMode
 from telegram.ext import (
-    ApplicationBuilder,
+    Updater,
     CommandHandler,
     MessageHandler,
-    ContextTypes,
-    filters
+    Filters,
+    CallbackContext
 )
 
-BOT_TOKEN = '7795554263:AAE7yje0MLNqiruDXWYjHx-xkgtqZGt5ByM'  # 🔐 Replace with your actual bot token
+BOT_TOKEN = '7795554263:AAE7yje0MLNqiruDXWYjHx-xkgtqZGt5ByM'  # Replace with your actual token
 
 # Enable logging
 logging.basicConfig(
@@ -19,7 +19,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-
+# Format datetime
 def format_time(utc_str):
     try:
         dt = datetime.strptime(utc_str, "%Y-%m-%dT%H:%M:%S.%fZ")
@@ -28,23 +28,23 @@ def format_time(utc_str):
     except:
         return "Unknown Time"
 
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
+# /start command
+def start(update: Update, context: CallbackContext):
+    update.message.reply_text(
         "👋 *Welcome to InstaStory Bot!*\n\n"
         "📥 Use `/story <username>` to download Instagram stories.\n"
         "📥 Or send any Instagram post/reel link to get media.\n\n"
         "🔍 Example: `/story natgeo`",
-        parse_mode="Markdown"
+        parse_mode=ParseMode.MARKDOWN
     )
 
-
-async def story(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# /story command
+def story(update: Update, context: CallbackContext):
     if len(context.args) != 1:
-        await update.message.reply_text(
+        update.message.reply_text(
             "⚠️ Please provide exactly *one* Instagram username.\n\n"
             "✅ Example: `/story virat.kohli`",
-            parse_mode="Markdown"
+            parse_mode=ParseMode.MARKDOWN
         )
         return
 
@@ -57,7 +57,7 @@ async def story(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.info("📦 Story Response: %s", data)
 
         if not data.get("success"):
-            await update.message.reply_text(f"❌ Failed: {data.get('message', 'Unknown error.')}")
+            update.message.reply_text(f"❌ Failed: {data.get('message', 'Unknown error.')}")
             return
 
         user = data["data"]["user"]
@@ -73,10 +73,10 @@ async def story(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"🕒 *Created:* {format_time(user.get('created_at'))}\n"
             f"🔄 *Updated:* {format_time(user.get('updated_at'))}"
         )
-        await update.message.reply_text(profile_text, parse_mode="Markdown", disable_web_page_preview=True)
+        update.message.reply_text(profile_text, parse_mode=ParseMode.MARKDOWN, disable_web_page_preview=True)
 
         if not stories:
-            await update.message.reply_text(f"ℹ️ No active stories for @{username}.")
+            update.message.reply_text(f"ℹ️ No active stories for @{username}.")
             return
 
         for i, story in enumerate(stories, 1):
@@ -84,21 +84,21 @@ async def story(update: Update, context: ContextTypes.DEFAULT_TYPE):
             media_type = story.get("type")
             try:
                 if media_type == "video":
-                    await update.message.reply_video(video=media_url)
+                    update.message.reply_video(video=media_url)
                 elif media_type == "photo":
-                    await update.message.reply_photo(photo=media_url)
+                    update.message.reply_photo(photo=media_url)
                 else:
-                    await update.message.reply_text(f"📎 Story {i}: {media_url}")
+                    update.message.reply_text(f"📎 Story {i}: {media_url}")
             except Exception as e:
                 logger.warning("⚠️ Media send failed: %s", str(e))
-                await update.message.reply_text(f"📎 Story {i}: {media_url}")
+                update.message.reply_text(f"📎 Story {i}: {media_url}")
 
     except Exception as e:
         logger.error("❌ Error fetching story: %s", str(e))
-        await update.message.reply_text("❌ Error occurred while fetching story.")
+        update.message.reply_text("❌ Error occurred while fetching story.")
 
-
-async def handle_reel(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# Handles reels and posts
+def handle_reel(update: Update, context: CallbackContext):
     text = update.message.text.strip()
     if "instagram.com" not in text or not any(x in text for x in ["/reel/", "/p/", "/tv/"]):
         return
@@ -112,7 +112,7 @@ async def handle_reel(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.info("📦 Post Response: %s", data)
 
         if not data.get("success"):
-            await update.message.reply_text(f"❌ Failed: {data.get('message', 'Unknown error.')}")
+            update.message.reply_text(f"❌ Failed: {data.get('message', 'Unknown error.')}")
             return
 
         d = data["data"]
@@ -127,29 +127,32 @@ async def handle_reel(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"🕒 *Date:* {d.get('created_at', 'Unknown')}\n\n"
             f"🎬 *Caption:*\n```\n{caption}\n```"
         )
-        await update.message.reply_text(text_info, parse_mode="Markdown", disable_web_page_preview=True)
+        update.message.reply_text(text_info, parse_mode=ParseMode.MARKDOWN, disable_web_page_preview=True)
 
         for media_url in media_urls:
             try:
                 if is_video:
-                    await update.message.reply_video(video=media_url)
+                    update.message.reply_video(video=media_url)
                 else:
-                    await update.message.reply_photo(photo=media_url)
+                    update.message.reply_photo(photo=media_url)
             except:
-                await update.message.reply_text(f"📎 Media: {media_url}")
+                update.message.reply_text(f"📎 Media: {media_url}")
 
     except Exception as e:
         logger.error("❌ Error: %s", str(e))
-        await update.message.reply_text("❌ Error while fetching post.")
+        update.message.reply_text("❌ Error while fetching post.")
 
-
+# Main function
 def main():
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("story", story))
-    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_reel))
-    app.run_polling()
+    updater = Updater(token=BOT_TOKEN, use_context=True)
+    dp = updater.dispatcher
 
+    dp.add_handler(CommandHandler("start", start))
+    dp.add_handler(CommandHandler("story", story))
+    dp.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_reel))
+
+    updater.start_polling()
+    updater.idle()
 
 if __name__ == "__main__":
     main()
